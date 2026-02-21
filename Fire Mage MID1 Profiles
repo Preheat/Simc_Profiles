@@ -1,0 +1,577 @@
+ptr=1
+# calculate_scale_factors=1
+# report_details=1
+
+mage="Sunfury Burnout"
+source=default
+spec=fire
+level=90
+race=orc
+role=spell
+position=back
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZmHAAAAAAsZmZmZAAwYGzYmZmZ2AwMDxMGDGMA
+# external_buffs.pool=power_infusion:120:1
+
+# Default consumables
+potion=lights_potential_2
+flask=flask_of_the_magisters_2
+food=queldorei_medley
+augmentation=void_touched_augment_rune
+temporary_enchant=main_hand:thalassian_phoenix_oil_2
+
+# Executed before combat begins. Accepts non-harmful actions only.
+actions.precombat=arcane_intellect
+actions.precombat+=/snapshot_stats
+actions.precombat+=/variable,name=cast_remains_time,value=0.2
+actions.precombat+=/variable,name=pooling_time,value=10*gcd.max
+# Flamestrike at 5 targets during Combustion. Do at 3 targets if you don't care about prio dmg.
+actions.precombat+=/variable,name=ff_combustion_flamestrike,if=!talent.spellfire_spheres,value=5
+# Flamestrike at 8 targets. Do at 3 targets if you don't care about prio dmg.
+actions.precombat+=/variable,name=ff_filler_flamestrike,if=!talent.spellfire_spheres,value=8+(999*!talent.fuel_the_fire)
+# Flamestrike at 4 targets during Combustion. Do at 3 targets if you don't care about prio dmg.
+actions.precombat+=/variable,name=sf_combustion_flamestrike,if=talent.spellfire_spheres,value=4+(999*!talent.fuel_the_fire)
+# Flamestrike at 5 targets. Do at 4 targets if you don't care about prio dmg.
+actions.precombat+=/variable,name=sf_filler_flamestrike,if=talent.spellfire_spheres,value=5+(999*!talent.fuel_the_fire)
+# Delay Combustion to stack up buffs for all builds unless it means losing casts of Combustion. Do not do so if fight length is short.
+actions.precombat+=/variable,name=combustion_delay,value=10+(8*talent.firestarter)-(10*(expected_combat_length<60)+10*(expected_combat_length<30))-10*(((expected_combat_length%%60)>=25)&((expected_combat_length%%60)<=40))
+actions.precombat+=/variable,name=15ssteroid_trinket_equipped,op=set,value=equipped.nevermelting_ice_crystal|equipped.lily_of_the_eternal_weave|equipped.sunblood_amethyst|equipped.astral_gladiators_badge_of_ferocity|equipped.arazs_ritual_forge|equipped.freightrunners_flask|equipped.emberwing_feather|equipped.vaelgors_final_stare|equipped.galactic_gladiators_badge_of_ferocity
+actions.precombat+=/variable,name=10ssteroid_trinket_equipped,op=set,value=equipped.ever_collapsing_void_fissure
+actions.precombat+=/snapshot_stats
+actions.precombat+=/mirror_image
+# Precast one of these.
+actions.precombat+=/frostfire_bolt,if=talent.frostfire_bolt
+actions.precombat+=/meteor,if=!talent.firestarter&talent.sunfury_execution
+actions.precombat+=/pyroblast
+
+# Executed every time the actor is available.
+actions=call_action_list,name=cds
+# Combustion delayed on pull by 10 seconds for most non-Firestarter builds, and 18 seconds for all Firestarter builds.
+actions+=/run_action_list,name=ff_combustion,if=talent.frostfire_bolt&((time>=variable.combustion_delay)&(cooldown.combustion.remains<=variable.combustion_precast_time|buff.combustion.up|cooldown.combustion.ready))
+actions+=/run_action_list,name=sf_combustion,if=!talent.frostfire_bolt&((time>=variable.combustion_delay)&(cooldown.combustion.remains<=variable.combustion_precast_time|buff.combustion.up|cooldown.combustion.ready))
+actions+=/run_action_list,name=ff_filler,if=talent.frostfire_bolt
+actions+=/run_action_list,name=sf_filler
+
+actions.cds=variable,name=combustion_precast_time,value=(action.scorch.cast_time*!buff.pyroclasm.up*scorch_execute.active)+(action.fireball.cast_time*!buff.pyroclasm.up*!scorch_execute.active)+(action.pyroblast.cast_time*buff.pyroclasm.up)-variable.cast_remains_time
+# Use Potion on pull. Delay by 4 seconds for each of these that are true: [Firestarter Sunfury] [Savor] [Pyroclasm+Firestarter+Sunfury]. Goal is to make pot last all of CDs.
+actions.cds+=/potion,if=time>=(0+(4*(talent.firestarter&talent.spellfire_spheres)+4*(talent.savor_the_moment)+4*(talent.pyroclasm&talent.firestarter&talent.spellfire_spheres)))|buff.combustion.remains>6|fight_remains<35
+#Note for future: check if the 10 second trinkets are actually worse with this line or if we can remove the conditional variables
+actions.cds+=/use_items,if=buff.combustion.remains>6|cooldown.combustion.remains<3&time>=variable.combustion_delay-2&talent.frostfire_bolt&variable.15ssteroid_trinket_equipped|fight_remains<20
+actions.cds+=/ancestral_call,if=buff.combustion.remains>6|fight_remains<20
+actions.cds+=/berserking,if=buff.combustion.remains>6|fight_remains<20
+actions.cds+=/blood_fury,if=buff.combustion.remains>6|fight_remains<20
+actions.cds+=/fireblood,if=buff.combustion.remains>6|fight_remains<10
+actions.cds+=/invoke_external_buff,name=power_infusion,if=buff.power_infusion.down&(buff.combustion.remains>6|fight_remains<25)
+
+# During Combustion/Hyperthermia, spend Fire Blasts with Heating Up. 
+actions.fireblast=fire_blast,use_off_gcd=1,use_while_casting=1,if=cooldown_react&!buff.hot_streak.react&(buff.combustion.up|buff.hyperthermia.up)&(hot_streak_spells_in_flight+buff.heating_up.react=1)&gcd.remains<gcd.max
+# During non-execute filler, use Fire Blast with Heating Up while hardcasting Fireball/FFB/Pyroblast.
+actions.fireblast+=/fire_blast,use_off_gcd=1,use_while_casting=1,if=cooldown_react&!buff.hot_streak.react&(action.fireball.executing&action.fireball.execute_remains>0.1|buff.pyroclasm.react&action.pyroblast.executing&action.pyroblast.execute_remains>0.1)&((target.health.pct>=30|!talent.scorch)&buff.heating_up.react)&(hot_streak_spells_in_flight+buff.heating_up.react=1)&gcd.remains<gcd.max
+# During execute, spend Fire Blasts while casting Scorch if you don't have Heating Up.
+actions.fireblast+=/fire_blast,use_off_gcd=1,use_while_casting=1,if=cooldown_react&!buff.hot_streak.react&(target.health.pct<30&talent.scorch)&(hot_streak_spells_in_flight+buff.heating_up.react=0)&action.scorch.executing&buff.heat_shimmer.down&gcd.remains<gcd.max
+# While delaying Combustion on pull (Firestarter or not), spend Fire Blasts with Heating Up freely. If not playing Firestarter, only do so during hardcasts.
+actions.fireblast+=/fire_blast,use_off_gcd=1,use_while_casting=1,if=cooldown_react&!buff.hot_streak.react&time<variable.combustion_delay&(talent.firestarter|action.fireball.executing&action.fireball.execute_remains>0.1|buff.pyroclasm.react&action.pyroblast.executing&action.pyroblast.execute_remains>0.1)&(hot_streak_spells_in_flight+buff.heating_up.react=1)&gcd.remains<gcd.max&cooldown.combustion.ready
+# When talented into Spontaneous Combustion, spend all Fire Blasts during the pre-cast going into Combustion regardless of Heating Up / Hot Streak status.
+actions.fireblast+=/fire_blast,use_off_gcd=1,use_while_casting=1,if=cooldown_react&(time>=variable.combustion_delay&(cooldown.combustion.remains<=variable.combustion_precast_time))&buff.combustion.down&talent.spontaneous_combustion&(action.scorch.executing|action.fireball.executing|action.pyroblast.executing|action.flamestrike.executing)
+# Spend all available Fire Blasts if fight is ending.
+actions.fireblast+=/fire_blast,use_off_gcd=1,use_while_casting=1,if=fight_remains<1
+
+actions.ff_combustion=combustion,use_off_gcd=1,use_while_casting=1,if=buff.combustion.down&action.fireball.executing&(action.fireball.execute_remains<variable.cast_remains_time)|action.meteor.in_flight&(action.meteor.in_flight_remains<0.3)|action.pyroblast.executing&(action.pyroblast.execute_remains<variable.cast_remains_time)|prev_gcd.1.meteor
+# Precast into Combustion. Prioritize Pyroclasm if available.
+actions.ff_combustion+=/flamestrike,if=active_enemies>=variable.ff_combustion_flamestrike&(buff.pyroclasm.up&!buff.hot_streak.react&buff.combustion.down)
+actions.ff_combustion+=/pyroblast,if=buff.pyroclasm.up&!buff.hot_streak.react&buff.combustion.down
+actions.ff_combustion+=/fireball,if=buff.combustion.down
+# Meteor is used towards the end of Combustion to maximize the Ignite bank for Burnout. If not playing Burnout, just make sure the Meteor lands during Combustion at any time.
+actions.ff_combustion+=/meteor,if=(talent.burnout&buff.combustion.remains<8)|(!talent.burnout&buff.combustion.remains>2)
+# Spend Hot Streaks on Pyroblast in ST or Flamestrike in AoE.
+actions.ff_combustion+=/flamestrike,if=active_enemies>=variable.ff_combustion_flamestrike&(buff.hot_streak.react)
+actions.ff_combustion+=/pyroblast,if=buff.hot_streak.react
+# Make sure Pyroclasm FINISHES its cast before Combustion ends.
+actions.ff_combustion+=/flamestrike,if=active_enemies>=variable.ff_combustion_flamestrike&(buff.pyroclasm.up&cast_time<buff.combustion.remains)
+actions.ff_combustion+=/pyroblast,if=buff.pyroclasm.up&cast_time<buff.combustion.remains
+actions.ff_combustion+=/scorch,if=buff.heat_shimmer.react|talent.scald&target.health.pct<30&buff.frostfire_empowerment.down
+actions.ff_combustion+=/fireball
+actions.ff_combustion+=/call_action_list,name=fireblast
+
+# Cast Meteor on CD starting from the precast of your first Combustion.
+actions.ff_filler=meteor,if=time>=(variable.combustion_delay-gcd.max)
+# During Firestarter, only use Pyroblast as your spender, even for AoE.
+actions.ff_filler+=/pyroblast,if=buff.hot_streak.up&talent.firestarter&time<variable.combustion_delay
+# Hold Hot Streak if Combustion is coming up soon. Do not hold if intentionally delaying Combustion.
+actions.ff_filler+=/flamestrike,if=active_enemies>=variable.ff_filler_flamestrike&(buff.hot_streak.react&(cooldown.combustion.remains>=5|time<variable.combustion_delay))
+actions.ff_filler+=/pyroblast,if=buff.hot_streak.react&(cooldown.combustion.remains>=5|time<variable.combustion_delay)
+# Spend Pyroclasm immediately if you have 2 stacks available. Otherwise, hold one stack if it lasts until Combustion comes up.
+actions.ff_filler+=/flamestrike,if=active_enemies>=variable.ff_filler_flamestrike&(buff.pyroclasm.up&cooldown.combustion.remains>12|buff.pyroclasm.stack=2)
+actions.ff_filler+=/pyroblast,if=buff.pyroclasm.up&cooldown.combustion.remains>12|buff.pyroclasm.stack=2
+actions.ff_filler+=/scorch,if=buff.heat_shimmer.react
+actions.ff_filler+=/fireball
+actions.ff_filler+=/call_action_list,name=fireblast
+
+actions.sf_combustion=combustion,use_off_gcd=1,use_while_casting=1,if=action.scorch.executing&(action.scorch.execute_remains<variable.cast_remains_time)|action.fireball.executing&(action.fireball.execute_remains<variable.cast_remains_time)|action.pyroblast.executing&(action.pyroblast.execute_remains<variable.cast_remains_time)|action.flamestrike.executing&(action.flamestrike.execute_remains<variable.cast_remains_time)|action.meteor.in_flight&(action.meteor.in_flight_remains<0.3|buff.bloodlust.up)&!talent.sunfury_execution
+# Precast one of these into Combustion.
+actions.sf_combustion+=/meteor,if=buff.bloodlust.up&buff.combustion.down&(talent.blast_zone|active_enemies>=4)&!talent.sunfury_execution
+actions.sf_combustion+=/flamestrike,if=active_enemies>=variable.sf_combustion_flamestrike&(buff.combustion.down&!buff.hot_streak.react&buff.pyroclasm.up)
+actions.sf_combustion+=/pyroblast,if=buff.combustion.down&!buff.hot_streak.react&buff.pyroclasm.up
+actions.sf_combustion+=/scorch,if=buff.combustion.down&(target.health.pct<30|active_enemies>=4)
+# If precasting Meteor into Combustion, can fit a Fireball unless Bloodlust is active.
+actions.sf_combustion+=/fireball,if=buff.combustion.down&(!prev_gcd.1.meteor|buff.bloodlust.down)
+# Meteor is used towards the end of Combustion to maximize the Ignite bank for Burnout. If not playing Burnout, just make sure the Meteor lands during Combustion at any time.
+actions.sf_combustion+=/meteor,if=(talent.burnout&buff.combustion.remains<8|!talent.burnout&buff.combustion.remains>2)|buff.combustion.remains>2&active_enemies>=4
+# Spend Hot Streaks on Pyroblast in ST or Flamestrike in AoE. The Scorch condition is simply to simulate predictable guaranteed crits during Combustion.
+actions.sf_combustion+=/flamestrike,if=active_enemies>=variable.sf_combustion_flamestrike&(buff.hot_streak.react|prev_gcd.1.scorch&buff.heating_up.react&time-action.scorch.last_used<0.2)
+actions.sf_combustion+=/pyroblast,if=buff.hot_streak.react|prev_gcd.1.scorch&buff.heating_up.react&time-action.scorch.last_used<0.2
+# Make sure Pyroclasm FINISHES its cast before Combustion ends.
+actions.sf_combustion+=/flamestrike,if=active_enemies>=variable.sf_combustion_flamestrike&(buff.pyroclasm.up&!buff.hot_streak.up&cast_time<buff.combustion.remains)
+actions.sf_combustion+=/pyroblast,if=buff.pyroclasm.up&!buff.hot_streak.up&cast_time<buff.combustion.remains
+actions.sf_combustion+=/scorch
+actions.sf_combustion+=/fireball
+# We prioritize starting to cast Pyroclasm (on 2 stacks) over Fire Blast if there's no risk of overcapping. In AoE, we also do not want to cast Fire Blast during a hardcast Flamestrike.
+actions.sf_combustion+=/call_action_list,name=fireblast,if=!talent.pyroclasm|(buff.pyroclasm.stack<2|action.pyroblast.executing&action.pyroblast.execute_remains>0.2&buff.pyroclasm.stack=2|cooldown.fire_blast.charges_fractional>=2|buff.combustion.remains<action.pyroblast.cast_time)&(active_enemies<variable.sf_combustion_flamestrike|buff.pyroclasm.down|!action.flamestrike.executing)
+
+# In AoE, outside of Bloodlust, we can use Meteor into a Hardcast as a precast for Combustion.
+actions.sf_filler=meteor,if=active_enemies>=4&time>variable.combustion_delay&cooldown.combustion.remains<=gcd.max+variable.combustion_precast_time&buff.bloodlust.down
+# During Firestarter, only use Pyroblast as your spender, even for AoE
+actions.sf_filler+=/pyroblast,if=buff.hot_streak.up&talent.firestarter&time<variable.combustion_delay
+# Spend Hot Streaks on Pyroblast in ST or Flamestrike in AoE. The Scorch condition is simply to simulate predictable guaranteed crits during execute.
+actions.sf_filler+=/flamestrike,if=active_enemies>=variable.sf_filler_flamestrike&(buff.hot_streak.react|prev_gcd.1.scorch&buff.heating_up.react&time-action.scorch.last_used<0.2|buff.hyperthermia.up)
+actions.sf_filler+=/pyroblast,if=buff.hot_streak.react|prev_gcd.1.scorch&buff.heating_up.react&time-action.scorch.last_used<0.2|buff.hyperthermia.up
+# Spend Pyroclasm immediately if you have 2 stacks available or if Firestarter is active. Otherwise, hold one stack if it lasts until Combustion comes up.
+actions.sf_filler+=/flamestrike,if=active_enemies>=variable.sf_filler_flamestrike&buff.pyroclasm.up&((cooldown.combustion.remains>=12|time<variable.combustion_delay&(talent.firestarter|time>(variable.combustion_delay-action.flamestrike.cast_time)))|buff.pyroclasm.stack=2)
+actions.sf_filler+=/pyroblast,if=buff.pyroclasm.up&(cooldown.combustion.remains>=12|time<variable.combustion_delay&(talent.firestarter|time>(variable.combustion_delay-action.pyroblast.cast_time)))|buff.pyroclasm.stack=2
+# Meteor is used on CD with Blast Zone starting from the first Combustion. Without Blast Zone, it's used either purely during Combustion or within 12 seconds before if talented into Sunfury Execution.
+actions.sf_filler+=/meteor,if=(!talent.blast_zone&talent.sunfury_execution&cooldown.combustion.remains<12&buff.pyroclasm.stack<2)|(talent.blast_zone&time>variable.combustion_delay)
+# Cast Scorch in execute or with a Heat Shimmer proc.
+actions.sf_filler+=/scorch,if=talent.scald&target.health.pct<30|buff.heat_shimmer.react&(target.health.pct>=90|prev_gcd.1.pyroblast|prev_gcd.1.flamestrike)
+actions.sf_filler+=/fireball
+actions.sf_filler+=/call_action_list,name=fireblast
+
+
+head=voidbreakers_veil,id=250060,bonus_id=1808/12214/12667/13575/13575/13575/12497,ilevel=289,gem_id=240983,enchant_id=7991
+neck=amulet_of_the_abyssal_hymn,id=250247,ilevel=289,gem_id=240900/240900
+shoulder=voidbreakers_leyline_nexi,id=250058,bonus_id=40/12675/12806/13335/13340/13574/13574/13574,ilevel=289,enchant_id=7973
+back=adherents_silken_shroud,id=239656,bonus_id=8793/8960/12214/12384,ilevel=285,crafted_stats=36/32
+chest=robes_of_endless_oblivion,id=249912,bonus_id=40/12676/12806/13335/13336,ilevel=289,enchant_id=7987
+wrist=martyrs_bindings,id=239648,bonus_id=1808/8960/12066/12214/12214/12214/12214/12384/12667/12497,ilevel=285,gem_id=240900,crafted_stats=36/49
+hands=voidbreakers_gloves,id=250061,bonus_id=40/12675/12806/13335/13337/13574/13574/13574,ilevel=289
+waist=whisperinscribed_sash,id=249376,bonus_id=1808,ilevel=289,gem_id=240900
+legs=voidbreakers_britches,id=250059,bonus_id=40/12676/12806/13335/13339/13575/13575/13575,ilevel=289,enchant_id=7935
+feet=voidbreakers_treads,id=250062,bonus_id=40/12806/13335,ilevel=289,enchant_id=8019
+finger1=eye_of_midnight,id=249920,enchant_id=8025,gem_id=240900/240900,ilevel=289
+finger2=bond_of_light,id=249369,enchant_id=8025,gem_id=240916,ilevel=289
+trinket1=emberwing_feather,id=250144,bonus_id=40/12806/13440,ilevel=289
+trinket2=gaze_of_the_alnseer,id=249343,bonus_id=40/12806/13335,ilevel=289
+main_hand=brazier_of_the_dissonant_dirge,id=249286,bonus_id=12792/13448/13452,ilevel=289,enchant_id=8039
+
+# Gear Summary
+# gear_ilvl=288.47
+# gear_stamina=17604
+# gear_intellect=1664
+# gear_crit_rating=93
+# gear_haste_rating=1196
+# gear_mastery_rating=1033
+# gear_versatility_rating=147
+# gear_speed_rating=76
+# gear_avoidance_rating=499
+# gear_armor=533
+# set_bonus=midnight_season_1_2pc=1
+# set_bonus=midnight_season_1_4pc=1
+
+copy="SF Fire MID1"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZGAAAAAgNzMzMDAAGzwYmZmZ2GAmZImxYwMMA
+copy="Sunfury Burnout w Scorch and BZ"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZGAAAAAgNzMzMDAAGzYmxMzMzGAmZImxYwMMA
+copy="Sunfury Pyroclasm"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sstMDAwmZmx2MzMzMAAAAAgNzMzMDAAmxYmZmxMzGAmZImxAGMA
+copy="Frostfire"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAmZZGzMLzCEAAwiZmx2YmZGAAAAAgNzMzMDAAGzYmZmZmZ2AmZADzYMYwA
+copy="FF No FS"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAmZZGzMLzCEAAwiZmx2YmZGAAAAAgNzMzMDAAGzYmZmZmZ2AmZADzYmBwA
+copy="Sunfury Burnout no FS"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZmBAAAAAsZmZmZAAwYGzYmZmZ2AwMDxMGDgB
+copy="Pyroclasm no FS"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sstMDAwmZmx2MzMzMAAAAAgNzMzMDAAmxYmZmxMzGAmZImxMAMA
+copy="Sunfury Cinderella (ST Only) SF Fire MID1"
+talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmZ2GGzMAAAAAgNzMzMDAAGmZGzMMz2AwMDxMGGmhB
+head=voidbreakers_veil,id=250060,bonus_id=1808/12214/12667/13575/13575/13575/12497,ilevel=289,gem_id=240983,enchant_id=7991
+neck=amulet_of_the_abyssal_hymn,id=250247,ilevel=289,gem_id=240900/240905
+shoulder=voidbreakers_leyline_nexi,id=250058,bonus_id=40/12675/12806/13335/13340/13574/13574/13574,ilevel=289,enchant_id=7973
+back=voidbreakers_encryption,id=250055,ilevel=289
+chest=robes_of_endless_oblivion,id=249912,bonus_id=40/12676/12806/13335/13336,ilevel=289,enchant_id=7987
+wrist=martyrs_bindings,id=239648,bonus_id=1808/8960/12066/12214/12214/12214/12214/12667/13454/12497,ilevel=285,gem_id=240900,crafted_stats=36/49
+hands=voidbreakers_gloves,id=250061,bonus_id=40/12675/12806/13335/13337/13574/13574/13574,ilevel=289
+waist=whisperinscribed_sash,id=249376,bonus_id=1808,ilevel=289,gem_id=240900
+legs=voidbreakers_britches,id=250059,bonus_id=40/12676/12806/13335/13339/13575/13575/13575,ilevel=289,enchant_id=7935
+feet=voidbreakers_treads,id=250062,bonus_id=40/12806/13335,ilevel=289,enchant_id=8019
+finger1=eye_of_midnight,id=249920,ilevel=289,gem_id=240900/240900,enchant_id=8025
+finger2=masterwork_sindorei_band,id=240949,bonus_id=8960/13453/13622/13667,ilevel=285,gem_id=240892,enchant_id=7997,crafted_stats=36/49
+trinket1=emberwing_feather,id=250144,bonus_id=40/12806/13440,ilevel=289
+trinket2=gaze_of_the_alnseer,id=249343,bonus_id=40/12806/13335,ilevel=289
+main_hand=brazier_of_the_dissonant_dirge,id=249286,bonus_id=12792/13448/13452,ilevel=289,enchant_id=8039
+
+##############################################################################################################################################################
+
+# copy="Sunfury Burnout - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZmHAAAAAAsZmZmZAAwYGzYmZmZ2AwMDxMGDGMA
+# #------------------------------------------------------------------#
+
+# #------------------------------------------------------------------#
+# head=voidbreakers_veil,id=250060,bonus_id=1808/12214/12667/13575/13575/13575/12497,ilevel=289,gem_id=240983,enchant_id=7991
+# neck=amulet_of_the_abyssal_hymn,id=250247,ilevel=289,gem_id=240900/240900
+# shoulder=voidbreakers_leyline_nexi,id=250058,bonus_id=40/12675/12806/13335/13340/13574/13574/13574,ilevel=289,enchant_id=7973
+# back=adherents_silken_shroud,id=239656,bonus_id=8793/8960/12214/12384,ilevel=285,crafted_stats=36/32
+# chest=robes_of_endless_oblivion,id=249912,bonus_id=40/12676/12806/13335/13336,ilevel=289,enchant_id=7987
+# wrist=martyrs_bindings,id=239648,bonus_id=1808/8960/12066/12214/12214/12214/12214/12384/12667/12497,ilevel=285,gem_id=240900,crafted_stats=36/49
+# hands=voidbreakers_gloves,id=250061,bonus_id=40/12675/12806/13335/13337/13574/13574/13574,ilevel=289
+# waist=whisperinscribed_sash,id=249376,bonus_id=1808,ilevel=289,gem_id=240900
+# legs=voidbreakers_britches,id=250059,bonus_id=40/12676/12806/13335/13339/13575/13575/13575,ilevel=289,enchant_id=7935
+# feet=voidbreakers_treads,id=250062,bonus_id=40/12806/13335,ilevel=289,enchant_id=8019
+# finger1=eye_of_midnight,id=249920,enchant_id=8025,gem_id=240900/240900,ilevel=289
+# finger2=bond_of_light,id=249369,enchant_id=8025,gem_id=240916,ilevel=289
+# trinket1=emberwing_feather,id=250144,bonus_id=40/12806/13440,ilevel=289
+# trinket2=gaze_of_the_alnseer,id=249343,bonus_id=40/12806/13335,ilevel=289
+# main_hand=brazier_of_the_dissonant_dirge,id=249286,bonus_id=12792/13448/13452,ilevel=289,enchant_id=8039
+
+# copy="Mobile Sunfury (M+ Build) - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZGAAAAAgNzMzMDAAGzwYmZmZ2GAmZImxYwMMA
+# copy="Sunfury Burnout w Scorch and BZ - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZGAAAAAgNzMzMDAAGzYmxMzMzGAmZImxYwMMA
+# copy="Sunfury Pyroclasm - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sstMDAwmZmx2MzMzMAAAAAgNzMzMDAAmxYmZmxMzGAmZImxAGMA
+# copy="Frostfire - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAmZZGzMLzCEAAwiZmx2YmZGAAAAAgNzMzMDAAGzYmZmZmZ2AmZADzYMYwA
+# copy="FF No FS - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAmZZGzMLzCEAAwiZmx2YmZGAAAAAgNzMzMDAAGzYmZmZmZ2AmZADzYmBwA
+# copy="Sunfury Burnout no FS - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmx2YmZmBAAAAAsZmZmZAAwYGzYmZmZ2AwMDxMGDgB
+# copy="Pyroclasm no FS - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sstMDAwmZmx2MzMzMAAAAAgNzMzMDAAmxYmZmxMzGAmZImxMAMA
+# copy="Sunfury Cinderella (Free HeatShimmer) - POST"
+# talents=C8DAAAAAAAAAAAAAAAAAAAAAAYGGLzMzswMDZmZGAAAGAwMz0sssMDAwmZmZ2GGzMAAAAAgNzMzMDAAGmZGzMMz2AwMDxMGGmhB
+# head=voidbreakers_veil,id=250060,bonus_id=1808/12214/12667/13575/13575/13575/12497,ilevel=289,gem_id=240983,enchant_id=7991
+# neck=amulet_of_the_abyssal_hymn,id=250247,ilevel=289,gem_id=240900/240905
+# shoulder=voidbreakers_leyline_nexi,id=250058,bonus_id=40/12675/12806/13335/13340/13574/13574/13574,ilevel=289,enchant_id=7973
+# back=voidbreakers_encryption,id=250055,ilevel=289
+# chest=robes_of_endless_oblivion,id=249912,bonus_id=40/12676/12806/13335/13336,ilevel=289,enchant_id=7987
+# wrist=martyrs_bindings,id=239648,bonus_id=1808/8960/12066/12214/12214/12214/12214/12667/13454/12497,ilevel=285,gem_id=240900,crafted_stats=36/49
+# hands=voidbreakers_gloves,id=250061,bonus_id=40/12675/12806/13335/13337/13574/13574/13574,ilevel=289
+# waist=whisperinscribed_sash,id=249376,bonus_id=1808,ilevel=289,gem_id=240900
+# legs=voidbreakers_britches,id=250059,bonus_id=40/12676/12806/13335/13339/13575/13575/13575,ilevel=289,enchant_id=7935
+# feet=voidbreakers_treads,id=250062,bonus_id=40/12806/13335,ilevel=289,enchant_id=8019
+# finger1=eye_of_midnight,id=249920,ilevel=289,gem_id=240900/240900,enchant_id=8025
+# finger2=masterwork_sindorei_band,id=240949,bonus_id=8960/13453/13622/13667,ilevel=285,gem_id=240892,enchant_id=7997,crafted_stats=36/49
+# trinket1=emberwing_feather,id=250144,bonus_id=40/12806/13440,ilevel=289
+# trinket2=gaze_of_the_alnseer,id=249343,bonus_id=40/12806/13335,ilevel=289
+# main_hand=brazier_of_the_dissonant_dirge,id=249286,bonus_id=12792/13448/13452,ilevel=289,enchant_id=8039
+
+
+# Mage Gearsets for Midnight
+# Midnight Release Dungeons
+# Den of Nalorakk
+# main_hand=fallen_speakers_staff,id=251156,ilevel=214
+# neck=yoke_of_the_charging_bear,id=251173,ilevel=214
+# chest=hoarded_harvest_wrap,id=251147,ilevel=214
+# wrists=winters_embrace_bracers,id=251154,ilevel=214
+# legs=forest_dream_leg_guards,id=251160,ilevel=214
+# finger1=pilphered_precious_band,id=251148,ilevel=214
+
+# Murder Row
+# trinket1=freightrunners_flask,id=250215,ilevel=214
+# main_hand=,id=251123,ilevel=214
+# neck=,id=251142,ilevel=214
+# back=,id=251132,ilevel=214
+# chest=,id=251139,ilevel=214
+# wrists=,id=251127,ilevel=214
+# hands=,id=251129,ilevel=214
+# feet=,id=251137,ilevel=214
+# finger1=,id=251136,ilevel=214
+
+# The Blinding Vale
+# trinket1=lightspire_core,id=250214,ilevel=214
+# trinket1=sapling_of_the_dawnroot,id=250259,ilevel=214
+# main_hand=,id=215188,ilevel=214
+# off_hand=,id=251191,ilevel=214
+# head=,id=251199,ilevel=214,ilevel=289,gem_id=240967
+# back=,id=251190,ilevel=214
+# waist=,id=251185,ilevel=214
+# finger1=,id=251194,ilevel=214
+
+# Voidscar Arena
+# trinket1=mindpiercers_sigil,id=250224,ilevel=214
+# main_hand=,id=251225,ilevel=214
+# head=,id=251232,ilevel=214,ilevel=289,gem_id=240967
+# neck=,id=251234,ilevel=214
+# shoulders=,id=251227,ilevel=214
+# waist=,id=251222,ilevel=214
+# feet=,id=251219,ilevel=214
+# finger1=,id=252258,ilevel=214
+
+
+# Season 1 Dungeons
+# New
+# Magisters Terrace
+# trinket1=eye_of_the_drowning_void,id=250257,ilevel=289
+# main_hand=,id=251111,ilevel=289
+# back=,id=260312,ilevel=289
+# chest=,id=251120,ilevel=289
+# wrists=,id=251108,ilevel=289
+# waist=clasp_of_compliance,id=251102,ilevel=289
+# finger1=,id=251115,ilevel=289
+
+# Maisara Caverns
+# trinket1=soulcatchers_charm,id=250223,ilevel=289
+# trinket1=vessel_of_tortured_souls,id=250258,ilevel=289
+# main_hand=,id=251178,ilevel=289
+# back=,id=251161,ilevel=289
+# hands=,id=251172,ilevel=289
+# feet=,id=251167,ilevel=289
+
+# Nexus-Point Xenas
+# finger1=occlusion_of_void,id=251217,ilevel=289
+# finger1=omission_of_light,id=251093,ilevel=289
+# main_hand=,id=251201,ilevel=289
+# shoulders=,id=251213,ilevel=289
+# back=fluxweave_cloak,id=251206,ilevel=289
+# hands=,id=251211,ilevel=289
+# legs=,id=251205,ilevel=289
+
+# Windrunner Spire
+# trinket1=emberwing_feather,id=250144,ilevel=289
+# trinket1=heart_of_wind,id=250256,ilevel=289
+# off_hand=,id=251094,ilevel=289
+# head=,id=251080,ilevel=289,ilevel=289,gem_id=240967
+# neck=,id=251096,ilevel=289
+# shoulders=,id=251085,ilevel=289
+# legs=commanders_faded_breeches,id=251090,ilevel=289
+
+
+# Old
+# Algeth'ar Academy
+# main_hand=final_grade,id=193707,ilevel=289
+# main_hand=spellboon_saber,id=193710,ilevel=289
+# off_hand=vexamus_expulsion_rod,id=193709,ilevel=289
+# head=organized_pontificators_mask,id=193703,ilevel=289,ilevel=289,gem_id=240967
+# back=potion_stained_cloak,id=193712,ilevel=289
+# chest=bronze_challengers_robe,id=193720,ilevel=289
+# hands=experimental_safety_gloves,id=193713,ilevel=289
+# finger1=platinum_star_band,id=193708,ilevel=289
+
+# Pit of Saron
+# trinket1=nevermelting_ice_crystal,id=50259,ilevel=289
+# main_hand=surgeons_needle,id=50227,ilevel=289
+# neck=barbed_ymirheim_choker,id=50228,ilevel=289
+# back=cloak_of_the_fallen_cardinal,id=49823,ilevel=289
+# chest=palebone_robes,id=49825,ilevel=289
+# wrists=wristguards_of_subterranean_moss,id=49809,ilevel=289
+# waist=braid_of_salt_and_fire,id=50263,ilevel=289
+# feet=ice_steeped_sandals,id=49805,ilevel=289
+# finger1=purloined_wedding_ring,id=49812,ilevel=289
+
+# Seat of the Triumvirate
+# trinket1=reality_breacher,id=151310,ilevel=289
+# main_hand=umbral_spire_of_zuraal,id=258514,ilevel=289
+# main_hand=wand_of_saprishs_gaze,id=258516,ilevel=289
+# off_hand=nazhars_netherclaw,id=258523,ilevel=289
+# head=shadow_weavers_crown,id=151337,ilevel=289
+# neck=necklace_of_the_twisting_void,id=151309,ilevel=289
+# chest=voidbender_robe,id=151303,ilevel=289
+# wrists=entropic_wristwraps,id=151305,ilevel=289
+# hands=handwraps_of_the_ascended,id=151300,ilevel=289
+# waist=cord_of_unraveling_reality,id=151302,ilevel=289
+# feet=slippers_of_growing_despair,id=151301,ilevel=289
+# finger1=band_of_the_triumvirate,id=151311,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+# finger1=eredath_seal_of_mobility,id=151308,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+
+# Skyreach
+# main_hand=spire_of_the_furious_construct,id=258047,ilevel=289
+# main_hand=skybreakers_blade,id=258218,ilevel=289
+# off_hand=rukhrans_solar_reliquary,id=258472,ilevel=289
+# shoulders=lightbinder_shoulderguards,id=258578,ilevel=289
+# back=rigid_scale_greatcloak,id=258575,ilevel=289
+# wrists=bracers_of_blazing_light,id=258580,ilevel=289
+# legs=legwraps_of_swirling_light,id=258574,ilevel=289
+# feet=lightbinder_treads,id=258584,ilevel=289
+
+
+# Season 1 Midnight Raids
+# The Dreamrift - Chimaerus the Undreamt God
+# trinket1=gaze_of_the_alnseer,id=249343,ilevel=289
+# off_hand=,id=249922,ilevel=289
+# feet=dreamscorched_striders,id=249373,ilevel=289
+# chest=,id=250063,ilevel=289
+
+# The Voidspire
+# Imperator Averzian
+# back=imperators_banner,id=249335,ilevel=289
+# waist=endless_march_waistwrap,id=249319,ilevel=289
+# legs=,id=249323,ilevel=289
+
+# Vorasius
+# off_hand=,id=249276,ilevel=289
+# wrists=,id=249315,ilevel=289
+# finger1=,id=249336,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+# hands=,id=250061,ilevel=289
+
+# Fallen-King Salhadaar
+# trinket1=wraps_of_cosmic_madness,id=249340,ilevel=289
+# neck=,id=249337,ilevel=289
+# chest=,id=249308,ilevel=289
+# shoulders=,id=250058,ilevel=289
+
+# Vaelgor & Ezzorak
+# trinket1=vaelgors_final_stare,id=249346,ilevel=289
+# back=draconic_nullcape,id=249370,ilevel=289
+# feet=slippers_of_the_midnight_flame,id=249305,ilevel=289
+# legs=voidbreakers_britches,id=250059,ilevel=289
+
+# Lightblinded Vanguard
+# main_hand=,id=249294,ilevel=289
+# hands=,id=249330,ilevel=289
+# finger1=,id=249369,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+# head=,id=250060,ilevel=289
+
+# Crown of the Cosmos
+# trinket1=locuswalkers_ribbon,id=249809,ilevel=289
+# head=,id=249329,ilevel=289
+# neck=eternal_voidsong_chain,id=249368,ilevel=289,gem_id=240890
+
+# March on Quel'Danas
+# Belo'ren, Child of Al'ar
+# main_hand=,id=249283,ilevel=289
+# shoulders=,id=249328,ilevel=289
+# waist=whisperinscribed_sash,id=249376,ilevel=289
+# finger1=,id=249919,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+
+# Midnight Falls
+# trinket1=shadow_of_the_empyrean_requiem,id=249810,ilevel=289
+# main_hand=,id=249286,ilevel=289
+# neck=,id=250247,ilevel=289,gem_id=240890
+# chest=,id=249912,ilevel=289
+# finger1=eye_of_midnight,id=249920,ilevel=289,ilevel=289,gem_id=240916,enchant_id=7967
+# Curio
+
+# PvP Trinkets
+# trinket1=galactic_gladiators_badge_of_ferocity,id=255613,ilevel=262
+# trinket1=galactic_gladiators_insignia_of_alacrity,id=255614,ilevel=262
+
+# Delve Trinkets
+# trinket1=ever_collapsing_void_fissure,id=251786,ilevel=275
+# trinket1=sealed_chaos_urn,id=251787,ilevel=275
+# trinket1=void_reapers_libram,id=251785,ilevel=275
+# trinket1=sylvan_wakrapuku,id=251784,ilevel=275
+# trinket1=astalors_anguish_agitator,id=264878,ilevel=275
+# trinket1=drum_of_renewed_bonds,id=248583,ilevel=275
+# trinket1=glorious_crusaders_keepsake,id=251792,ilevel=275
+# trinket1=tangle_of_vibrant_vines,id=252957,ilevel=275
+
+# Dungeon Trinkets
+# trinket1=eye_of_the_drowning_void,id=250257,ilevel=289
+# trinket1=soulcatchers_charm,id=250223,ilevel=289
+# trinket1=vessel_of_tortured_souls,id=250258,ilevel=289
+# trinket1=emberwing_feather,id=250144,ilevel=289
+# trinket1=heart_of_wind,id=250256,ilevel=289
+# trinket1=nevermelting_ice_crystal,id=50259,ilevel=289
+# trinket1=reality_breacher,id=151310,ilevel=289
+# Raid Trinkets
+# trinket1=gaze_of_the_alnseer,id=249343,ilevel=289
+# trinket1=wraps_of_cosmic_madness,id=249340,ilevel=289
+# trinket1=vaelgors_final_stare,id=249346,ilevel=289
+# trinket1=locuswalkers_ribbon,id=249809,ilevel=289
+# trinket1=shadow_of_the_empyrean_requiem,id=249810,ilevel=289
+
+# Catalyst
+# feet=voidbreakers_treads,id=250062,ilevel=289
+# wrists=voidbreakers_bracers,id=250056,ilevel=289
+# back=voidbreakers_encryption,id=250055,ilevel=289
+# waist=voidbreakers_sage_cord,id=250057,ilevel=289
+
+
+# Crafted Items
+# main_hand=magisters_ritual_knife,id=237838,ilevel=285,crafted_stats=36/32
+# main_hand=magisters_mana_sword,id=237843,ilevel=285,crafted_stats=36/32
+# main_hand=magisters_grand_focus,id=244179,ilevel=285,crafted_stats=36/32
+# main_hand=alnhara_cane,id=245770,ilevel=285,crafted_stats=36/32
+# head=martyrs_crown,id=239652,ilevel=285,crafted_stats=36/32
+# shoulders=martyrs_mantle,id=239650,ilevel=285,crafted_stats=36/32
+# back=adherents_silken_shroud,id=239656,ilevel=285,crafted_stats=36/32
+# chest=martyrs_vestments,id=239655,ilevel=285,crafted_stats=36/32
+# wrists=martyrs_bindings,id=239648,ilevel=285,crafted_stats=36/32
+# hands=martyrs_gloves,id=239653,ilevel=285,crafted_stats=36/32
+# waist=martyrs_waistwrap,id=239649,ilevel=285,crafted_stats=36/32
+# legs=martyrs_leggings,id=239651,ilevel=285,crafted_stats=36/32
+# feet=martyrs_slippers,id=239654,ilevel=285,crafted_stats=36/32
+# finger1=masterwork_sindorei_band,id=240949,ilevel=285,crafted_stats=36/32,ilevel=289,gem_id=240916,enchant_id=7967
+# off_hand=alnhara_lantern,id=245769,ilevel=285,crafted_stats=36/32
+# neck=masterwork_sindorei_amulet,id=240950,ilevel=285,crafted_stats=36/32
+
+# Embellishments:
+# Sets
+# Sunfire haste > 80%hp
+# back=sunfire_cloak,id=239658,ilevel=285,bonus_id=8794
+# wrists=sunfire_bracers,id=239657,ilevel=285,bonus_id=8794
+# feet=sunfire_treads,id=239659,ilevel=285,bonus_id=8794
+# Arcanoweave crit > 80%hp
+# wrist=arcanoweave_bracers,id=239660,ilevel=285,crafted_stats=36/32,bonus_id=8794
+# back=arcanoweave_cloak,id=239661,ilevel=285,crafted_stats=36/32,bonus_id=8794
+# feet=arcanoweave_treads,id=239662,ilevel=285,crafted_stats=36/32,bonus_id=8794
+# Solo Embellishments Items
+# waist=sunfire_sash,id=239663,ilevel=285
+# waist=arcanoweave_cord,id=239664,ilevel=285
+# finger1=signet_of_azerothian_blessings,id=241140,ilevel=285,ilevel=289,gem_id=240916,enchant_id=7967
+# finger1=loa_worshipers_band,id=251513,ilevel=285,ilevel=289,gem_id=240916,enchant_id=7967
+# neck=voidstone_shielding_array,id=251073,ilevel=285,gem_id=240890
+# neck=thalassian_phoenix_torque,id=241139,ilevel=285,gem_id=240890
+# trinket1=midnight_alchemists_stone,id=241340,ilevel=285
+# trinket1=darkmoon_dominion_void,id=246307,bonus_id=8794
+# trinket1=darkmoon_dominion_rot,id=246306,bonus_id=8794
+# trinket1=darkmoon_dominion_hunt,id=246304,bonus_id=8794
+# trinket1=darkmoon_dominion_blood,id=246305,bonus_id=8794
+
+# Item Embellishments Bonus IDs:
+# double gem effects
+# 13454/8794
+# gem arcane dmg
+# 13453/8794
+# primal spore aoe dmg
+# 12687/8794
+# devouring banding dmg and stats
+# 12685/8794
+# arcanoweave lining
+# 12384/8794
+# sunfire lining
+# 12385/8794
+
+
+# Consumeables
+# Health Potion
+# 241304
+# potion=silvermoon_health_potion_2
+
+# Potions
+# 241308
+# potion=lights_potential_2
+# 241288
+# potion=potion_of_recklessness_2
+# 241292
+# potion=draught_of_rampant_abandon_2
+# 241296
+# potion=potion_of_zealotry_2
+
+# Flasks
+# 241324
+# flask=flask_of_the_blood_knights_2
+# 241326
+# flask=flask_of_the_shattered_sun_2
+# 241320
+# flask=flask_of_thalassian_resistance_2
+
+# Food
+# Main Stat 242272
+# food=queldorei_medley
+
+# Augmentation Runes
+# augmentation=void_touched_augment_rune
+
+# Weapon Oil
+# 243738
+# temporary_enchant=smugglers_enchanted_edge_2
+# 243734
+# temporary_enchant=thalassian_phoenix_oil_2
